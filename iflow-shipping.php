@@ -4,7 +4,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
 
-
 // =========================================================================
 /**
  * Function woo_iflow_generar_envio_iflow
@@ -207,6 +206,7 @@ function woo_iflow_crear_datos_iflow($datos = array(), $order = ''){
 
 	$countries_obj = new WC_Countries();
 	$country_states_array = $countries_obj->get_states();
+	$log = new WC_Logger();
 	if($order->get_shipping_first_name()){
 		$provincia = $country_states_array['AR'][$order->get_shipping_state()];
 		$datos['nombre_cliente'] = $order->get_shipping_first_name();
@@ -223,14 +223,28 @@ function woo_iflow_crear_datos_iflow($datos = array(), $order = ''){
 		$datos['ciudad_cliente'] = $order->get_billing_city();
 		$datos['cp_cliente'] = $order->get_billing_postcode();
 		$datos['observaciones_cliente'] = $order->get_billing_address_2();
-	} 
+	}
 	$datos['provincia_cliente'] = $provincia;	
 	$datos['telefono_cliente'] = $order->get_billing_phone();
 	$datos['celular_cliente'] = $order->get_billing_phone();
 	$datos['email_cliente'] = $order->get_billing_email();
-	$datos['nro_calle_cliente'] = array_pop(explode(" ",$datos['direccion_cliente']));
+	$array_direccion = explode(" ", $datos['direccion_cliente']);
+	$datos['nro_calle_cliente'] = array_pop($array_direccion);
 	if(! is_numeric($datos['nro_calle_cliente'])){
 		$datos['nro_calle_cliente'] = '';
+	} else {
+		if(empty($array_direccion)) {
+			$datos['direccion_cliente'] = "Sin Dirección";
+		} else {
+			$datos['direccion_cliente'] = implode(" ", $array_direccion);
+		}
+	}
+	// Si hay un número en la segunda dirección, y no se pudo conseguir ningún numero en la primera dirección, lo enviamos a esta 2da direcc.
+	if(is_numeric($datos['observaciones_cliente']) && $datos['nro_calle_cliente'] == ''){
+		$datos['nro_calle_cliente'] = $datos['observaciones_cliente'];
+	}
+	if( empty($datos['nro_calle_cliente']) ) {
+		$datos['nro_calle_cliente'] = ' ';
 	}
 
 	if(html_entity_decode($datos['provincia_cliente']) == 'Tucumán'){
@@ -260,8 +274,8 @@ function woo_iflow_crear_datos_iflow($datos = array(), $order = ''){
 		$product_variado =  wc_get_product( $product_variation_id );
 		//Se obtienen los datos del producto
 		if($product->get_weight() !== ''){
-			$datos['volumen'] .= $product->get_length().','.$product->get_height().','.$product->get_width().'|';
-			$datos['peso'] += $product->get_weight();
+			$datos['volumen'] .= floatval(wc_get_dimension( fix_format( $product->get_length() ), 'cm' )).','.floatval(wc_get_dimension( fix_format( $product->get_height() ), 'cm' )).','.floatval(wc_get_dimension( fix_format( $product->get_width() ), 'cm' )).'|';
+			$datos['peso'] += floatval(wc_get_weight( fix_format( $product->get_weight() ), 'g' ));
 			$datos['precio_total'] += $item->get_total();
 			$sku = $product->get_sku();
 			if($sku == ''){
@@ -277,8 +291,8 @@ function woo_iflow_crear_datos_iflow($datos = array(), $order = ''){
 			if($sku == ''){
 				$sku = 'SIN SKU';
 			}
-			$datos['volumen'] .= $product_variado->get_length().','.$product_variado->get_height().','.$product_variado->get_width().'|';
-			$datos['peso'] += $product_variado->get_weight();
+			$datos['volumen'] .= floatval(wc_get_dimension( fix_format( $product_variado->get_length() ), 'cm' )).','.floatval(wc_get_dimension( fix_format( $product_variado->get_height() ), 'cm' )).','.floatval(wc_get_dimension( fix_format( $product_variado->get_width() ), 'cm' )).'|';			
+			$datos['peso'] += floatval(wc_get_weight( fix_format( $product_variado->get_weight() ), 'g' ));
 			$datos['precio_total'] += $item->get_total();
 			$datos['items'][] = array(
 				'item' => $product_variado->get_name(),
@@ -314,14 +328,28 @@ function woo_iflow_crear_datos_iflow($datos = array(), $order = ''){
 				'street_number' => $datos['nro_calle_cliente'],
 				'between_1' => $datos['direccion_cliente'],
 				'other_info' => $datos['observaciones_cliente'],
-				'neighborhood_name' => $datos['direccion_cliente'],
+				'neighborhood_name' => $datos['ciudad_cliente'],
 				'zip_code' => $datos['cp_cliente'],
-				'city' => $datos['ciudad_cliente']
+				'city' => $datos['provincia_cliente']
 			)
 		)
 	);
 
 	return $data;
+}
+
+// =========================================================================
+/**
+ * Replace comma by dot.
+ *
+ * @param  mixed $value Value to fix.
+ *
+ * @return mixed
+ */
+function fix_format( $value ) {
+	$value = str_replace( ',', '.', $value );
+
+	return $value;
 }
 
 
